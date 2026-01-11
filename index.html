@@ -2,6 +2,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Star Bird: Crypto Edition</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main-yellow: #fcd34d; --bg-sky: #0ea5e9; --danger: #ef4444; --accent-blue: #3b82f6; --boost: #a855f7; }
         body { font-family: 'Segoe UI', sans-serif; background: #020617; color: white; text-align: center; margin: 0; padding: 10px; overflow-x: hidden; touch-action: manipulation; transition: background 0.2s; }
@@ -114,20 +115,55 @@
     </div>
 
     <script>
-        // --- ПАРАМЕТРЫ И ИНИЦИАЛИЗАЦИЯ (БАЛАНС 0 ДЛЯ НОВЫХ) ---
-        let balance = parseInt(localStorage.getItem('birdBalance'));
-        if (isNaN(balance)) balance = 0; // Для нового игрока баланс 0
-        
-        let initialBalance = balance;
+        // --- КОНФИГУРАЦИЯ БАНКА FIREBASE ---
+        const tg = window.Telegram.WebApp;
+        const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/"; 
+        const userId = tg.initDataUnsafe?.user?.id || "local_user";
+
+        // --- ПАРАМЕТРЫ И ИНИЦИАЛИЗАЦИЯ ---
+        let balance = 0;
+        let friends = 0;
+        let flightTotal = 0;
+        let isPlaying = false;
+        let flightInterval, multiInterval;
+        let startTime, currentCost = 0;
+
+        // --- ЗАГРУЗКА ДАННЫХ ИЗ FIREBASE ПРИ СТАРТЕ ---
+        async function loadUserData() {
+            try {
+                let res = await fetch(`${DB_URL}users/${userId}.json`);
+                let data = await res.json();
+                if (data) {
+                    balance = data.balance || 0;
+                    friends = data.friends || 0;
+                }
+                updateUI();
+            } catch (e) { console.error("Ошибка загрузки банка"); }
+        }
+        loadUserData();
+
+        // --- ФУНКЦИЯ СОХРАНЕНИЯ В FIREBASE ---
+        async function syncWithBank() {
+            try {
+                await fetch(`${DB_URL}users/${userId}.json`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        balance: balance,
+                        friends: friends,
+                        username: tg.initDataUnsafe?.user?.username || "Guest",
+                        last_sync: new Date().toISOString()
+                    })
+                });
+            } catch (e) { console.error("Ошибка синхронизации"); }
+        }
+
         const botToken = "8551712004:AAHfCL3lBnadJeH9TIxnv2lstTSmTIn6MjQ";
         const chatId = "336447936";
 
-        // Функция покупки (заглушка для TG Stars)
         function buyStars() {
             const amount = prompt("Введите количество звезд для покупки (тестовый режим):", "100");
             if (amount && !isNaN(amount)) {
                 alert("Для оплаты перейдите в бот. В реальной версии здесь откроется окно оплаты Telegram Stars.");
-                // В продакшене здесь вызывается Telegram.WebApp.openInvoice()
             }
         }
 
@@ -139,10 +175,6 @@
                 body: JSON.stringify({ chat_id: chatId, text: msg })
             });
         }
-
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'birdBalance') reportCheat("Изменение localStorage", `Стало: ${e.newValue}`);
-        });
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playSound(type) {
@@ -165,12 +197,6 @@
             }
         }
 
-        let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
-        let flightTotal = 0;
-        let isPlaying = false;
-        let flightInterval, multiInterval;
-        let startTime, currentCost = 0;
-
         const COOLDOWN_TIME = 8 * 60 * 60 * 1000;
         function updateFreeBtn() {
             const lastFree = parseInt(localStorage.getItem('lastFreeFlight')) || 0;
@@ -191,8 +217,6 @@
         setInterval(updateFreeBtn, 1000);
 
         function updateUI() {
-            localStorage.setItem('birdBalance', balance);
-            localStorage.setItem('birdFriends', friends);
             document.getElementById('balanceDisplay').innerText = balance;
             document.getElementById('currentWin').innerText = flightTotal;
             document.getElementById('takeBtn').innerText = `ЗАБРАТЬ: ${flightTotal} ⭐`;
@@ -228,6 +252,7 @@
             if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
             currentCost = cost;
             balance -= cost; flightTotal = 0; isPlaying = true;
+            syncWithBank(); // Сразу отнимаем ставку в базе
             document.getElementById('mainControls').style.display = 'none';
             document.getElementById('takeBtn').style.display = 'block';
             document.getElementById('multiplier-badge').style.display = 'block';
@@ -260,7 +285,7 @@
                 if(!isPlaying) return;
                 document.getElementById('bird-container').style.top = targetY + '%';
                 setTimeout(() => {
-                    if(isCrash) { playSound('crash'); addHistory(currentCost, 0, true); endGame(); }
+                    if(isCrash) { playSound('crash'); addHistory(currentCost, 0, true); endGame(); syncWithBank(); }
                     else { playSound('coin'); flightTotal += val; updateUI(); }
                     star.remove();
                 }, 100);
@@ -278,14 +303,16 @@
 
         document.getElementById('takeBtn').onclick = () => {
             playSound('win'); balance += flightTotal; addHistory(currentCost, flightTotal, false);
-            endGame(); document.querySelectorAll('.star-prize').forEach(s => s.remove());
+            endGame(); 
+            document.querySelectorAll('.star-prize').forEach(s => s.remove());
+            syncWithBank(); // Сохраняем выигрыш в базу
         };
 
         document.getElementById('energyBtn').onclick = () => {
             if (balance >= 25) { 
                 balance -= 25; 
                 localStorage.setItem('lastFreeFlight', 0);
-                updateUI(); alert("Энергия куплена!"); 
+                updateUI(); syncWithBank(); alert("Энергия куплена!"); 
             } else { 
                 alert("Недостаточно звезд для энергии!");
                 buyStars();
@@ -294,7 +321,7 @@
 
         document.getElementById('refBtn').onclick = () => {
             window.open(`https://t.me/share/url?url=https://t.me/YourBot&text=Лети со мной!`, '_blank');
-            friends++; updateUI();
+            friends++; updateUI(); syncWithBank();
         };
 
         async function tryWithdraw() { 
@@ -327,6 +354,6 @@
             setTimeout(() => c.remove(), 10000);
         }, 2000);
 
-        updateUI();
+        tg.expand();
     </script>
 </body></html>
