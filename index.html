@@ -115,58 +115,57 @@
     </div>
 
     <script>
-        // --- КОНФИГУРАЦИЯ БАНКА FIREBASE ---
         const tg = window.Telegram.WebApp;
-        const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/"; 
-        const userId = tg.initDataUnsafe?.user?.id || "local_user";
+        tg.expand();
 
-        // --- ПАРАМЕТРЫ И ИНИЦИАЛИЗАЦИЯ ---
+        // --- Firebase Настройки ---
+        const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/";
+        let userId = tg.initDataUnsafe?.user?.id || "test_user";
+
         let balance = 0;
-        let friends = 0;
-        let flightTotal = 0;
-        let isPlaying = false;
-        let flightInterval, multiInterval;
-        let startTime, currentCost = 0;
+        let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
 
-        // --- ЗАГРУЗКА ДАННЫХ ИЗ FIREBASE ПРИ СТАРТЕ ---
-        async function loadUserData() {
-            try {
-                let res = await fetch(`${DB_URL}users/${userId}.json`);
-                let data = await res.json();
-                if (data) {
-                    balance = data.balance || 0;
-                    friends = data.friends || 0;
-                }
+        // Загрузка баланса из Firebase
+        fetch(`${DB_URL}users/${userId}.json`).then(r => r.json()).then(data => {
+            if (data) {
+                balance = data.stars || 0;
                 updateUI();
-            } catch (e) { console.error("Ошибка загрузки банка"); }
-        }
-        loadUserData();
-
-        // --- ФУНКЦИЯ СОХРАНЕНИЯ В FIREBASE ---
-        async function syncWithBank() {
-            try {
-                await fetch(`${DB_URL}users/${userId}.json`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        balance: balance,
-                        friends: friends,
-                        username: tg.initDataUnsafe?.user?.username || "Guest",
-                        last_sync: new Date().toISOString()
-                    })
-                });
-            } catch (e) { console.error("Ошибка синхронизации"); }
-        }
+            }
+        });
 
         const botToken = "8551712004:AAHfCL3lBnadJeH9TIxnv2lstTSmTIn6MjQ";
         const chatId = "336447936";
 
+        // РЕАЛЬНАЯ ПОКУПКА ЧЕРЕЗ TELEGRAM STARS
         function buyStars() {
-            const amount = prompt("Введите количество звезд для покупки (тестовый режим):", "100");
-            if (amount && !isNaN(amount)) {
-                alert("Для оплаты перейдите в бот. В реальной версии здесь откроется окно оплаты Telegram Stars.");
-            }
+            const amount = prompt("Сколько звезд купить?", "100");
+            if (!amount || isNaN(amount)) return;
+
+            tg.openInvoice({
+                title: "Пополнение звезд",
+                description: "Покупка звезд для игры Star Bird",
+                currency: "XTR", // Код звезд
+                prices: [{ label: "Звезды", amount: parseInt(amount) }],
+                payload: "stars_topup"
+            }, (status) => {
+                if (status === 'paid') {
+                    balance += parseInt(amount);
+                    saveData();
+                    updateUI();
+                    tg.showAlert("Оплата успешно завершена!");
+                }
+            });
         }
 
+        function saveData() {
+            fetch(`${DB_URL}users/${userId}.json`, {
+                method: 'PUT',
+                body: JSON.stringify({ stars: balance, friends: friends, lastUpdate: Date.now() })
+            });
+            document.getElementById('balanceDisplay').innerText = balance;
+        }
+
+        // --- Остальная логика игры (БЕЗ ИЗМЕНЕНИЙ) ---
         async function reportCheat(reason, details) {
             const msg = `⚠️ ПОДОЗРЕНИЕ НА ЧИТЕРСТВО\nПричина: ${reason}\nДетали: ${details}\nТекущий баланс: ${balance}`;
             await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -196,6 +195,11 @@
                 gain.gain.setValueAtTime(0.1, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.3);
             }
         }
+
+        let flightTotal = 0;
+        let isPlaying = false;
+        let flightInterval, multiInterval;
+        let startTime, currentCost = 0;
 
         const COOLDOWN_TIME = 8 * 60 * 60 * 1000;
         function updateFreeBtn() {
@@ -245,14 +249,12 @@
         function startFlight(cost) {
             if (isPlaying) return;
             if (cost > 0 && balance < cost) {
-                alert("Недостаточно звезд! Пополните баланс.");
-                buyStars();
+                tg.showAlert("Недостаточно звезд! Пополните баланс.");
                 return;
             }
             if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
             currentCost = cost;
             balance -= cost; flightTotal = 0; isPlaying = true;
-            syncWithBank(); // Сразу отнимаем ставку в базе
             document.getElementById('mainControls').style.display = 'none';
             document.getElementById('takeBtn').style.display = 'block';
             document.getElementById('multiplier-badge').style.display = 'block';
@@ -285,7 +287,7 @@
                 if(!isPlaying) return;
                 document.getElementById('bird-container').style.top = targetY + '%';
                 setTimeout(() => {
-                    if(isCrash) { playSound('crash'); addHistory(currentCost, 0, true); endGame(); syncWithBank(); }
+                    if(isCrash) { playSound('crash'); addHistory(currentCost, 0, true); endGame(); }
                     else { playSound('coin'); flightTotal += val; updateUI(); }
                     star.remove();
                 }, 100);
@@ -298,30 +300,28 @@
             document.getElementById('takeBtn').style.display = 'none';
             document.getElementById('multiplier-badge').style.display = 'none';
             document.getElementById('mainControls').style.display = 'grid';
+            saveData();
             updateUI();
         }
 
         document.getElementById('takeBtn').onclick = () => {
             playSound('win'); balance += flightTotal; addHistory(currentCost, flightTotal, false);
-            endGame(); 
-            document.querySelectorAll('.star-prize').forEach(s => s.remove());
-            syncWithBank(); // Сохраняем выигрыш в базу
+            endGame(); document.querySelectorAll('.star-prize').forEach(s => s.remove());
         };
 
         document.getElementById('energyBtn').onclick = () => {
             if (balance >= 25) { 
                 balance -= 25; 
                 localStorage.setItem('lastFreeFlight', 0);
-                updateUI(); syncWithBank(); alert("Энергия куплена!"); 
+                updateUI(); saveData(); alert("Энергия куплена!"); 
             } else { 
-                alert("Недостаточно звезд для энергии!");
-                buyStars();
+                tg.showAlert("Недостаточно звезд!");
             }
         };
 
         document.getElementById('refBtn').onclick = () => {
-            window.open(`https://t.me/share/url?url=https://t.me/YourBot&text=Лети со мной!`, '_blank');
-            friends++; updateUI(); syncWithBank();
+            window.open(`https://t.me/share/url?url=https://t.me/Luckyspin2026_bot&text=Лети со мной!`, '_blank');
+            friends++; localStorage.setItem('birdFriends', friends); updateUI();
         };
 
         async function tryWithdraw() { 
@@ -334,9 +334,9 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ chat_id: chatId, text: message })
                     });
-                    alert(`Заявка #${userCode} принята!`);
+                    tg.showAlert(`Заявка #${userCode} принята!`);
                 } catch (e) { alert("Ошибка сети."); }
-            } else { alert("Нужно 1000 ⭐ и 5 друзей!"); }
+            } else { tg.showAlert("Нужно 1000 ⭐ и 5 друзей!"); }
         }
 
         document.getElementById('freeBtn').onclick = () => startFlight(0);
@@ -354,6 +354,6 @@
             setTimeout(() => c.remove(), 10000);
         }, 2000);
 
-        tg.expand();
+        updateUI();
     </script>
 </body></html>
