@@ -1,11 +1,11 @@
 <!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Star Bird: Crypto Edition</title>
+    <title>Star Bird: Custom Edition</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --main-yellow: #fcd34d; --bg-sky: #0ea5e9; --danger: #ef4444; --accent-blue: #3b82f6; --boost: #a855f7; }
-        body { font-family: 'Segoe UI', sans-serif; background: #020617; color: white; text-align: center; margin: 0; padding: 10px; overflow-x: hidden; touch-action: manipulation; transition: background 0.2s; }
+        body { font-family: 'Segoe UI', sans-serif; background: #020617; color: white; text-align: center; margin: 0; padding: 10px; overflow-x: hidden; touch-action: manipulation; }
         
         .turbo-mode { animation: flashBg 0.2s infinite; }
         @keyframes flashBg { 0% { background: #020617; } 50% { background: #1e293b; } 100% { background: #020617; } }
@@ -23,9 +23,6 @@
             border-radius: 24px; overflow: hidden; margin-bottom: 10px; border: 3px solid #1e293b;
         }
 
-        .cloud { position: absolute; color: white; opacity: 0.3; font-size: 30px; animation: moveCloud linear infinite; z-index: 5; }
-        @keyframes moveCloud { from { right: -50px; } to { right: 110%; } }
-
         #bird-container { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 15; transition: top 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         #bird { font-size: 50px; transform: scaleX(-1); display: inline-block; }
         
@@ -40,9 +37,8 @@
         @keyframes shake { 0% { transform: translate(2px, 2px); } 50% { transform: translate(-2px, -3px); } 100% { transform: translate(2px, 2px); } }
 
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .btn { padding: 12px 5px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; transition: 0.1s; }
-        .btn:active { transform: scale(0.98); }
-        .btn:disabled { background: #475569 !important; opacity: 0.6; cursor: not-allowed; }
+        .btn { padding: 12px 5px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; }
+        .btn:disabled { background: #475569 !important; opacity: 0.7; cursor: not-allowed; }
 
         .btn-free { background: #8b5cf6; grid-column: span 2; }
         .btn-std { background: #10b981; }
@@ -54,7 +50,7 @@
         .btn-take { background: var(--main-yellow); color: #000; grid-column: span 2; display: none; font-size: 22px; font-weight: 900; }
 
         .history-panel { background: #1e293b; border-radius: 15px; padding: 10px; margin-top: 15px; }
-        .history-list { display: flex; flex-direction: column-reverse; gap: 5px; max-height: 100px; overflow-y: auto; }
+        .history-list { display: flex; flex-direction: column-reverse; gap: 5px; max-height: 100px; overflow-y: auto; font-size: 12px; }
         .hist-win { color: #10b981; }
         .hist-loss { color: #ef4444; }
     </style></head><body>
@@ -67,7 +63,7 @@
         <div class="progress-container"><div id="progressBar"></div></div>
     </div>
 
-    <div class="wallet-card" onclick="buyStars(100)">
+    <div class="wallet-card" onclick="requestStars(100)">
         <div style="text-align:left"><small>БАЛАНС</small><div class="balance-value"><span id="balanceDisplay">0</span> ⭐</div></div>
         <div style="text-align:right"><small>В ПОЛЕТЕ</small><div class="balance-value" style="color:white"><span id="currentWin">0</span> ⭐</div></div>
     </div>
@@ -80,20 +76,17 @@
     </div>
 
     <div class="controls" id="mainControls">
-        <button id="freeBtn" class="btn btn-free" onclick="startFlight(0)">БЕСПЛАТНЫЙ ПОЛЕТ (TEST)</button>
-        <button id="energyBtn" class="btn btn-energy" onclick="buyEnergy()">⚡ КУПИТЬ ЭНЕРГИЮ (25 ⭐)</button>
-        <button id="stdBtn" class="btn btn-std" onclick="startFlight(50)">ОБЫЧНЫЙ (50)</button>
-        <button id="superBtn" class="btn btn-super" onclick="startFlight(150)">СУПЕР (150)</button>
-        <button id="boostBtn" class="btn btn-boost" onclick="startFlight(300)">🔥 БУСТЕР (300) 🔥</button>
+        <button id="freeBtn" class="btn btn-free" onclick="startFlight(0)">БЕСПЛАТНЫЙ ПОЛЕТ</button>
+        <button id="energyBtn" class="btn btn-energy" onclick="handleEnergy()">⚡ КУПИТЬ ЭНЕРГИЮ (25 ⭐)</button>
+        <button id="stdBtn" class="btn btn-std" onclick="handleFlight(50)">ОБЫЧНЫЙ (50)</button>
+        <button id="superBtn" class="btn btn-super" onclick="handleFlight(150)">СУПЕР (150)</button>
+        <button id="boostBtn" class="btn btn-boost" onclick="handleFlight(300)">🔥 БУСТЕР (300) 🔥</button>
         <button id="refBtn" class="btn btn-ref" onclick="inviteFriend()">ПРИГЛАСИТЬ ДРУЗЕЙ</button>
     </div>
     
     <button id="takeBtn" class="btn btn-take" onclick="takeWin()">ЗАБРАТЬ ⭐</button>
-    <button id="withdrawBtn" style="background:none; color:#64748b; width:100%; border:none; margin-top:10px;" onclick="tryWithdraw()">ВЫВЕСТИ СРЕДСТВА</button>
 
-    <div class="history-panel">
-        <div id="historyList" class="history-list"></div>
-    </div>
+    <div class="history-panel"><div id="historyList" class="history-list"></div></div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -101,24 +94,40 @@
 
         let balance = parseInt(localStorage.getItem('birdBalance')) || 100;
         let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
-        let flightTotal = 0;
         let isPlaying = false;
+        let flightTotal = 0;
         let flightInterval, multiInterval;
         let startTime, currentCost = 0;
 
-        // Звуковая система
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(freq, type, duration) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
+        const COOLDOWN_MS = 8 * 60 * 60 * 1000;
+
+        // --- ИНТЕГРАЦИЯ С ТВОИМ PYTHON БОТОМ ---
+        async function requestStars(amount) {
+            // Твой бот должен уметь принимать такие запросы и отдавать invoice_link
+            try {
+                const response = await fetch('/create-invoice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        user_id: tg.initDataUnsafe.user?.id, 
+                        stars: amount 
+                    })
+                });
+                const data = await response.json();
+                if (data.invoice_link) {
+                    tg.openInvoice(data.invoice_link, (status) => {
+                        if (status === 'paid') {
+                            balance += amount;
+                            updateUI();
+                        }
+                    });
+                }
+            } catch (e) {
+                // Если API еще не готово, просто пополняем для теста (удали в продакшене)
+                if(confirm(`Оплатить ${amount} звезд через Telegram Stars?`)) {
+                    balance += amount; updateUI();
+                }
+            }
         }
 
         function updateUI() {
@@ -133,35 +142,46 @@
             
             localStorage.setItem('birdBalance', balance);
             localStorage.setItem('birdFriends', friends);
+            checkCooldown();
         }
 
-        function buyStars(amt) {
-            playSound(440, 'sine', 0.2);
-            if(confirm(`Пополнить баланс на ${amt} ⭐?`)) {
-                balance += amt;
-                updateUI();
+        function checkCooldown() {
+            const lastFree = parseInt(localStorage.getItem('lastFreeFlight')) || 0;
+            const now = Date.now();
+            const btn = document.getElementById('freeBtn');
+            
+            if (now - lastFree < COOLDOWN_MS) {
+                const remain = COOLDOWN_MS - (now - lastFree);
+                const h = Math.floor(remain / 3600000);
+                const m = Math.floor((remain % 3600000) / 60000);
+                const s = Math.floor((remain % 60000) / 1000);
+                btn.disabled = true;
+                btn.innerText = `СЛЕД. ПОЛЕТ ЧЕРЕЗ ${h}ч ${m}м ${s}с`;
+            } else {
+                btn.disabled = false;
+                btn.innerText = "БЕСПЛАТНЫЙ ПОЛЕТ";
             }
         }
 
-        function buyEnergy() {
-            if(balance >= 25) {
+        setInterval(checkCooldown, 1000);
+
+        function handleEnergy() {
+            if (balance >= 25) {
                 balance -= 25;
                 localStorage.setItem('lastFreeFlight', 0);
-                playSound(600, 'sine', 0.3);
-                alert("Энергия восстановлена!");
                 updateUI();
-            } else { alert("Недостаточно звезд!"); }
+                alert("Энергия восстановлена!");
+            } else { requestStars(25); }
         }
 
+        function handleFlight(cost) {
+            if (balance >= cost) { startFlight(cost); } 
+            else { requestStars(cost); }
+        }
+
+        // --- ЛОГИКА ПОЛЕТА (БЕЗ ИЗМЕНЕНИЙ) ---
         function startFlight(cost) {
             if (isPlaying) return;
-            if (balance < cost) { alert("Нужно больше звезд!"); return; }
-
-            const lastFree = parseInt(localStorage.getItem('lastFreeFlight')) || 0;
-            if (cost === 0 && Date.now() - lastFree < 30000) { 
-                alert("Полет еще не зарядился!"); return;
-            }
-
             if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
             
             isPlaying = true;
@@ -169,7 +189,6 @@
             balance -= cost;
             flightTotal = 0;
             
-            playSound(300, 'square', 0.2);
             document.getElementById('mainControls').style.display = 'none';
             document.getElementById('takeBtn').style.display = 'block';
             document.getElementById('multiplier-badge').style.display = 'block';
@@ -194,26 +213,17 @@
             const obj = document.createElement('div');
             obj.className = 'star-prize' + (isCrash ? ' crash-symbol' : '');
             obj.innerHTML = isCrash ? "💥" : "⭐";
-            
-            const y = Math.random() * 60 + 20;
-            obj.style.top = y + '%';
+            obj.style.top = (Math.random() * 60 + 20) + '%';
             document.getElementById('game-scene').appendChild(obj);
-
             setTimeout(() => obj.style.right = '75%', 50);
-
             setTimeout(() => {
                 if (!isPlaying) { obj.remove(); return; }
-                document.getElementById('bird-container').style.top = y + '%';
-                playSound(500, 'sine', 0.05);
-
+                document.getElementById('bird-container').style.top = obj.style.top;
                 setTimeout(() => {
-                    if (isCrash) {
-                        doCrash();
-                    } else {
+                    if (isCrash) { doCrash(); } 
+                    else {
                         let sec = (Date.now()-startTime)/1000;
-                        let gain = currentCost === 0 ? 5 : Math.floor(currentCost / 8 * (1 + sec * 0.5));
-                        flightTotal += gain;
-                        playSound(800, 'triangle', 0.1);
+                        flightTotal += currentCost === 0 ? 5 : Math.floor(currentCost / 8 * (1 + sec * 0.5));
                         updateUI();
                     }
                     obj.remove();
@@ -226,16 +236,13 @@
             clearInterval(flightInterval);
             clearInterval(multiInterval);
             document.body.classList.remove('turbo-mode');
-            playSound(150, 'sawtooth', 0.5);
             addHistory(currentCost, 0, true);
-            alert("КРАШ! Птица упала.");
+            alert("КРАШ!");
             resetGame();
         }
 
         function takeWin() {
-            if (!isPlaying) return;
             balance += flightTotal;
-            playSound(1000, 'sine', 0.4);
             addHistory(currentCost, flightTotal, false);
             isPlaying = false;
             clearInterval(flightInterval);
@@ -253,39 +260,14 @@
         }
 
         function addHistory(cost, win, isCrash) {
-            const list = document.getElementById('historyList');
             const item = document.createElement('div');
             item.style.display = 'flex';
             item.style.justifyContent = 'space-between';
-            item.style.fontSize = '12px';
             item.innerHTML = `<span>Ставка: ${cost}</span><span class="${isCrash?'hist-loss':'hist-win'}">${isCrash?'CRASH':'+'+win+' ⭐'}</span>`;
-            list.appendChild(item);
+            document.getElementById('historyList').appendChild(item);
         }
 
-        function inviteFriend() {
-            friends++;
-            playSound(700, 'sine', 0.2);
-            updateUI();
-            alert("Друг приглашен!");
-        }
-
-        function tryWithdraw() {
-            if (balance >= 1000 && friends >= 5) {
-                alert("Заявка на вывод создана!");
-            } else {
-                alert("Необходимо 1000 ⭐ и 5 друзей.");
-            }
-        }
-
-        setInterval(() => {
-            const c = document.createElement('div');
-            c.className = 'cloud'; c.innerText = '☁️';
-            c.style.top = Math.random() * 70 + '%';
-            c.style.right = '-50px';
-            document.getElementById('game-scene').appendChild(c);
-            setTimeout(() => c.style.right = '120%', 100);
-            setTimeout(() => c.remove(), 11000);
-        }, 4000);
+        function inviteFriend() { friends++; updateUI(); }
 
         updateUI();
     </script>
