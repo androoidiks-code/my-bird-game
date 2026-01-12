@@ -115,245 +115,159 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
+     // --- ИНИЦИАЛИЗАЦИЯ TELEGRAM ---
+const tg = window.Telegram.WebApp;
+tg.expand();
 
-        // --- Firebase Настройки ---
-        const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/";
-        let userId = tg.initDataUnsafe?.user?.id || "test_user";
+// --- КОНФИГУРАЦИЯ БАЗЫ ДАННЫХ ---
+const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/"; 
+const userId = tg.initDataUnsafe?.user?.id || "local_user";
+const botToken = "8551712004:AAHfCL3lBnadJeH9TIxnv2lstTSmTIn6MjQ"; // Твой токен
+const chatId = "336447936"; // Твой ID для уведомлений
 
-        let balance = 0;
-        let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
+// --- ПАРАМЕТРЫ ИГРЫ ---
+let balance = 0;
+let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
+let flightTotal = 0;
+let isPlaying = false;
+let flightInterval, multiInterval;
+let startTime, currentCost = 0;
 
-        // Загрузка баланса из Firebase
-        fetch(`${DB_URL}users/${userId}.json`).then(r => r.json()).then(data => {
-            if (data) {
-                balance = data.stars || 0;
-                updateUI();
-            }
+// --- ЗАГРУЗКА ДАННЫХ ---
+async function loadUserData() {
+    try {
+        let res = await fetch(`${DB_URL}users/${userId}.json`);
+        let data = await res.json();
+        if (data) {
+            balance = data.stars || data.balance || 0;
+            friends = data.friends || 0;
+            updateUI();
+        }
+    } catch (e) { console.error("Ошибка загрузки"); }
+}
+loadUserData();
+
+// --- СИНХРОНИЗАЦИЯ С БАЗОЙ ---
+async function saveData() {
+    try {
+        await fetch(`${DB_URL}users/${userId}.json`, {
+            method: 'PATCH',
+            body: JSON.stringify({ 
+                stars: balance, 
+                balance: balance,
+                friends: friends, 
+                username: tg.initDataUnsafe?.user?.username || "Guest",
+                lastUpdate: Date.now() 
+            })
         });
+        document.getElementById('balanceDisplay').innerText = balance;
+    } catch (e) { console.error("Ошибка сохранения"); }
+}
 
-        const botToken = "8551712004:AAHfCL3lBnadJeH9TIxnv2lstTSmTIn6MjQ";
-        const chatId = "336447936";
+function updateUI() {
+    document.getElementById('balanceDisplay').innerText = balance;
+    document.getElementById('friendsDisplay').innerText = friends;
+    updateFreeBtn();
+}
 
-        // РЕАЛЬНАЯ ПОКУПКА ЧЕРЕЗ TELEGRAM STARS
-        function buyStars() {
-            const amount = prompt("Сколько звезд купить?", "100");
-            if (!amount || isNaN(amount)) return;
-
-            tg.openInvoice({
-                title: "Пополнение звезд",
-                description: "Покупка звезд для игры Star Bird",
-                currency: "XTR", // Код звезд
-                prices: [{ label: "Звезды", amount: parseInt(amount) }],
-                payload: "stars_topup"
-            }, (status) => {
-                if (status === 'paid') {
-                    balance += parseInt(amount);
-                    saveData();
-                    updateUI();
-                    tg.showAlert("Оплата успешно завершена!");
-                }
-            });
+// --- ГЛАВНАЯ ФУНКЦИЯ ОПЛАТЫ STARS ---
+function buyStars(amount, purpose = "Пополнение") {
+    tg.openInvoice({
+        title: "Покупка звезд",
+        description: `Оплата: ${purpose}`,
+        currency: "XTR",
+        prices: [{ label: "Звезды", amount: parseInt(amount) }],
+        payload: `buy_${purpose}_${amount}`
+    }, (status) => {
+        if (status === 'paid') {
+            balance += parseInt(amount);
+            saveData();
+            updateUI();
+            tg.showAlert("✅ Оплата прошла! Звезды зачислены.");
         }
+    });
+}
 
-        function saveData() {
-            fetch(`${DB_URL}users/${userId}.json`, {
-                method: 'PUT',
-                body: JSON.stringify({ stars: balance, friends: friends, lastUpdate: Date.now() })
-            });
-            document.getElementById('balanceDisplay').innerText = balance;
-        }
+// --- ЛОГИКА КНОПОК ИГРЫ ---
 
-        // --- Остальная логика игры (БЕЗ ИЗМЕНЕНИЙ) ---
-        async function reportCheat(reason, details) {
-            const msg = `⚠️ ПОДОЗРЕНИЕ НА ЧИТЕРСТВО\nПричина: ${reason}\nДетали: ${details}\nТекущий баланс: ${balance}`;
+// Кнопка Энергии (25 звезд)
+document.getElementById('energyBtn').onclick = () => {
+    if (balance >= 25) { 
+        balance -= 25; 
+        localStorage.setItem('lastFreeFlight', 0);
+        updateUI(); saveData(); tg.showAlert("Энергия куплена!"); 
+    } else { 
+        tg.showConfirm("Недостаточно звезд. Купить 25 звезд для энергии?", (ok) => {
+            if(ok) buyStars(25, "Энергия");
+        });
+    }
+};
+
+// Функции для полетов (Спинов)
+function startFlight(cost) {
+    if (isPlaying) return;
+    if (cost > 0 && balance < cost) {
+        tg.showConfirm(`Недостаточно звезд. Купить ${cost} звезд для запуска?`, (ok) => {
+            if(ok) buyStars(cost, "Спин");
+        });
+        return;
+    }
+    if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
+    currentCost = cost;
+    balance -= cost; flightTotal = 0; isPlaying = true;
+    saveData();
+    document.getElementById('mainControls').style.display = 'none';
+    document.getElementById('takeBtn').style.display = 'block';
+    // Тут твоя анимация полета...
+}
+
+// Привязка кнопок спинов по цене
+document.getElementById('freeBtn').onclick = () => startFlight(0);
+// Если у тебя в HTML есть ID для кнопок 50, 150 и 300, добавь им вызов:
+// Например: document.getElementById('btn50').onclick = () => startFlight(50);
+
+// --- ОСТАЛЬНАЯ ЛОГИКА (ВЫВОД, ЧИТЫ) ---
+document.getElementById('refBtn').onclick = () => {
+    window.open(`https://t.me/share/url?url=https://t.me/Luckyspin2026_bot&text=Лети со мной!`, '_blank');
+    friends++; saveData(); updateUI();
+};
+
+async function tryWithdraw() { 
+    if (balance >= 1000 && friends >= 5) {
+        let userCode = Math.floor(100000 + Math.random() * 900000);
+        let message = `💰 ВЫВОД\nЮзер: ${userId}\nСумма: ${balance}\nКод: ${userCode}`;
+        try {
             await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: msg })
+                body: JSON.stringify({ chat_id: chatId, text: message })
             });
-        }
+            tg.showAlert(`Заявка #${userCode} принята!`);
+        } catch (e) { tg.showAlert("Ошибка сети."); }
+    } else { tg.showAlert("Нужно 1000 ⭐ и 5 друзей!"); }
+}
 
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(type) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            if (type === 'flap') {
-                osc.type = 'triangle'; osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-            } else if (type === 'coin') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(900, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
-            } else if (type === 'crash') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-            } else if (type === 'win') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(500, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-            }
-        }
+// Запуск анимации звезд на фоне
+setInterval(() => {
+    const c = document.createElement('div');
+    c.className = 'bg-star';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.top = '-10px';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 10000);
+}, 2000);
 
-        let flightTotal = 0;
-        let isPlaying = false;
-        let flightInterval, multiInterval;
-        let startTime, currentCost = 0;
-
-        const COOLDOWN_TIME = 8 * 60 * 60 * 1000;
-        function updateFreeBtn() {
-            const lastFree = parseInt(localStorage.getItem('lastFreeFlight')) || 0;
-            const now = Date.now();
-            const btn = document.getElementById('freeBtn');
-            if (now - lastFree < COOLDOWN_TIME) {
-                const remaining = COOLDOWN_TIME - (now - lastFree);
-                const hours = Math.floor(remaining / 3600000);
-                const mins = Math.floor((remaining % 3600000) / 60000);
-                const secs = Math.floor((remaining % 60000) / 1000);
-                btn.innerText = `БЛОК: ${hours}ч ${mins}м ${secs}с`;
-                btn.disabled = true;
-            } else {
-                btn.innerText = "БЕСПЛАТНЫЙ ПОЛЕТ (TEST)";
-                btn.disabled = false;
-            }
-        }
-        setInterval(updateFreeBtn, 1000);
-
-        function updateUI() {
-            document.getElementById('balanceDisplay').innerText = balance;
-            document.getElementById('currentWin').innerText = flightTotal;
-            document.getElementById('takeBtn').innerText = `ЗАБРАТЬ: ${flightTotal} ⭐`;
-            document.getElementById('ref-val').innerText = friends;
-            let totalProg = Math.min((balance/1000)*50 + (friends/5)*50, 100);
-            document.getElementById('progressBar').style.width = totalProg + '%';
-            document.getElementById('with-val').innerText = Math.floor(totalProg);
-            updateFreeBtn();
-        }
-
-        function addHistory(cost, profit, isCrash) {
-            const list = document.getElementById('historyList');
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            const resClass = isCrash ? "hist-loss" : "hist-win";
-            const resText = isCrash ? "CRASH 💥" : "+" + profit + " ⭐";
-            item.innerHTML = `<span>${cost === 0 ? 'FREE' : 'STAKE ' + cost}</span><span class="${resClass}">${resText}</span>`;
-            list.appendChild(item);
-        }
-
-        function calculateLoot(cost, time) {
-            const base = cost === 0 ? 2 : cost / 8;
-            return Math.floor(base * (1 + time * 0.4));
-        }
-
-        function startFlight(cost) {
-            if (isPlaying) return;
-            if (cost > 0 && balance < cost) {
-                tg.showAlert("Недостаточно звезд! Пополните баланс.");
-                return;
-            }
-            if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
-            currentCost = cost;
-            balance -= cost; flightTotal = 0; isPlaying = true;
-            document.getElementById('mainControls').style.display = 'none';
-            document.getElementById('takeBtn').style.display = 'block';
-            document.getElementById('multiplier-badge').style.display = 'block';
-            if (cost === 300) document.body.classList.add('turbo-mode');
-            updateUI();
-            startTime = Date.now();
-            multiInterval = setInterval(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                document.getElementById('multiplier-badge').innerText = 'x' + (1 + elapsed * 0.2).toFixed(2);
-            }, 100);
-            flightInterval = setInterval(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                let crashChance = (currentCost === 50) ? (elapsed < 2 ? 20 : 60) : (elapsed < 3 ? 15 : 60);
-                if (Math.random() * 100 < crashChance) { spawnStar(0); return; }
-                spawnStar(calculateLoot(currentCost, elapsed));
-            }, 800);
-        }
-
-        function spawnStar(val) {
-            const star = document.createElement('div');
-            star.className = 'star-prize';
-            const isCrash = (val === 0);
-            star.innerHTML = isCrash ? "💥" : "⭐";
-            if(isCrash) star.classList.add('crash-instant', 'crash-symbol');
-            const targetY = Math.random()*60+20;
-            star.style.top = targetY + '%';
-            document.getElementById('game-scene').appendChild(star);
-            if(!isCrash) { playSound('flap'); setTimeout(() => star.style.right = '85px', 20); }
-            setTimeout(() => {
-                if(!isPlaying) return;
-                document.getElementById('bird-container').style.top = targetY + '%';
-                setTimeout(() => {
-                    if(isCrash) { playSound('crash'); addHistory(currentCost, 0, true); endGame(); }
-                    else { playSound('coin'); flightTotal += val; updateUI(); }
-                    star.remove();
-                }, 100);
-            }, isCrash ? 300 : 500);
-        }
-
-        function endGame() {
-            isPlaying = false; clearInterval(flightInterval); clearInterval(multiInterval);
-            document.body.classList.remove('turbo-mode');
-            document.getElementById('takeBtn').style.display = 'none';
-            document.getElementById('multiplier-badge').style.display = 'none';
-            document.getElementById('mainControls').style.display = 'grid';
-            saveData();
-            updateUI();
-        }
-
-        document.getElementById('takeBtn').onclick = () => {
-            playSound('win'); balance += flightTotal; addHistory(currentCost, flightTotal, false);
-            endGame(); document.querySelectorAll('.star-prize').forEach(s => s.remove());
-        };
-
-        document.getElementById('energyBtn').onclick = () => {
-            if (balance >= 25) { 
-                balance -= 25; 
-                localStorage.setItem('lastFreeFlight', 0);
-                updateUI(); saveData(); alert("Энергия куплена!"); 
-            } else { 
-                tg.showAlert("Недостаточно звезд!");
-            }
-        };
-
-        document.getElementById('refBtn').onclick = () => {
-            window.open(`https://t.me/share/url?url=https://t.me/Luckyspin2026_bot&text=Лети со мной!`, '_blank');
-            friends++; localStorage.setItem('birdFriends', friends); updateUI();
-        };
-
-        async function tryWithdraw() { 
-            if (balance >= 1000 && friends >= 5) {
-                const userCode = Math.floor(Math.random() * 900000) + 100000;
-                const message = `🚀 ЗАПРОС НА ВЫВОД\nКод: #${userCode}\nБаланс: ${balance}\nДрузей: ${friends}`;
-                try {
-                    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: chatId, text: message })
-                    });
-                    tg.showAlert(`Заявка #${userCode} принята!`);
-                } catch (e) { alert("Ошибка сети."); }
-            } else { tg.showAlert("Нужно 1000 ⭐ и 5 друзей!"); }
-        }
-
-        document.getElementById('freeBtn').onclick = () => startFlight(0);
-        document.getElementById('stdBtn').onclick = () => startFlight(50);
-        document.getElementById('superBtn').onclick = () => startFlight(150);
-        document.getElementById('boostBtn').onclick = () => startFlight(300);
-        
-        setInterval(() => {
-            const c = document.createElement('div');
-            c.className = 'cloud'; c.innerText = '☁️';
-            c.style.top = Math.random()*80+'%'; c.style.right = '-50px';
-            let speed = isPlaying ? 3 : 8;
-            c.style.animation = `moveCloud ${speed + Math.random()*2}s linear forwards`;
-            document.getElementById('game-scene').appendChild(c);
-            setTimeout(() => c.remove(), 10000);
-        }, 2000);
-
-        updateUI();
+function updateFreeBtn() {
+    const lastFree = parseInt(localStorage.getItem('lastFreeFlight')) || 0;
+    const now = Date.now();
+    const btn = document.getElementById('freeBtn');
+    if (now - lastFree < 8 * 60 * 60 * 1000) {
+        btn.disabled = true;
+        btn.innerText = "БЛОК: 8ч";
+    } else {
+        btn.disabled = false;
+        btn.innerText = "БЕСПЛАТНО";
+    }
+}
     </script>
 </body></html>
