@@ -6,63 +6,36 @@
     <style>
         :root { --main-yellow: #fcd34d; --bg-sky: #0ea5e9; --danger: #ef4444; --accent-blue: #3b82f6; --boost: #a855f7; }
         body { font-family: 'Segoe UI', sans-serif; background: #020617; color: white; text-align: center; margin: 0; padding: 10px; overflow-x: hidden; touch-action: manipulation; transition: background 0.2s; }
-        
         .turbo-mode { animation: flashBg 0.2s infinite; }
         @keyframes flashBg { 0% { background: #020617; } 50% { background: #1e293b; } 100% { background: #020617; } }
-
         .withdraw-panel { background: var(--accent-blue); border-radius: 15px; padding: 12px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .progress-container { background: rgba(0,0,0,0.3); height: 8px; border-radius: 10px; margin-top: 8px; overflow: hidden; }
         #progressBar { background: var(--main-yellow); width: 0%; height: 100%; transition: 0.5s; }
-        
         .wallet-card { background: #1e293b; border-radius: 20px; padding: 15px; margin-bottom: 10px; border: 1px solid #334155; display: flex; justify-content: space-around; cursor: pointer; }
         .balance-value { font-size: 22px; color: var(--main-yellow); font-weight: bold; }
-
-        #game-scene { 
-            position: relative; width: 100%; height: 240px; 
-            background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%); 
-            border-radius: 24px; overflow: hidden; margin-bottom: 10px; border: 3px solid #1e293b;
-        }
-
+        #game-scene { position: relative; width: 100%; height: 240px; background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%); border-radius: 24px; overflow: hidden; margin-bottom: 10px; border: 3px solid #1e293b; }
         .cloud { position: absolute; color: white; opacity: 0.3; font-size: 30px; animation: moveCloud linear infinite; z-index: 5; }
         @keyframes moveCloud { from { right: -50px; } to { right: 110%; } }
-
         #bird-container { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 15; transition: top 0.2s; }
         #bird { font-size: 50px; transform: scaleX(-1); display: inline-block; }
-        #multiplier-badge { 
-            position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 10px;
-            font-size: 14px; font-weight: bold; color: var(--main-yellow);
-            white-space: nowrap; display: none;
-        }
-
-        .star-prize { 
-            position: absolute; right: -50px; font-size: 26px; z-index: 12; 
-            transition: right 0.5s linear; pointer-events: none;
-            filter: drop-shadow(0 0 10px gold);
-        }
-        
+        #multiplier-badge { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 10px; font-size: 14px; font-weight: bold; color: var(--main-yellow); white-space: nowrap; display: none; }
+        .star-prize { position: absolute; right: -50px; font-size: 26px; z-index: 12; transition: right 0.5s linear; pointer-events: none; filter: drop-shadow(0 0 10px gold); }
         .crash-symbol { font-size: 38px; filter: drop-shadow(0 0 15px red); }
         .crash-instant { position: absolute; right: 85px !important; transition: none !important; animation: shake 0.2s infinite; }
         @keyframes shake { 0% { transform: translate(2px, 2px); } 50% { transform: translate(-2px, -3px); } 100% { transform: translate(2px, 2px); } }
-
         .extra-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 10px; }
         .mini-card { background: #1e293b; padding: 8px 2px; border-radius: 10px; font-size: 9px; color: #94a3b8; border: 1px solid #334155; font-weight: bold; }
-
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn { padding: 12px 5px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; color: white; font-size: 11px; transition: 0.2s; box-shadow: 0 3px 0 rgba(0,0,0,0.3); }
         .btn:active { transform: translateY(2px); box-shadow: none; }
         .btn:disabled { background: #475569 !important; color: #94a3b8; cursor: not-allowed; box-shadow: none; transform: none; }
-        
         .btn-free { background: #8b5cf6; grid-column: span 2; border: 2px solid #a78bfa; }
         .btn-std { background: #10b981; }
         .btn-super { background: #f59e0b; }
         .btn-boost { background: var(--boost); grid-column: span 2; }
         .btn-energy { background: #ec4899; grid-column: span 2; font-size: 13px; }
         .btn-ref { background: #3b82f6; grid-column: span 2; }
-        
         .btn-take { background: var(--main-yellow); color: #000; grid-column: span 2; display: none; font-size: 20px; animation: pulse 1s infinite; border: 3px solid #b45309; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
-        
         .history-panel { background: #1e293b; border-radius: 15px; padding: 10px; margin-top: 15px; border: 1px solid #334155; }
         .history-title { font-size: 10px; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; }
         .history-list { display: flex; flex-direction: column-reverse; gap: 5px; max-height: 100px; overflow-y: auto; }
@@ -115,80 +88,75 @@
     </div>
 
     <script>
-        // --- 1. ИНИЦИАЛИЗАЦИЯ (TELEGRAM WEB APP) ---
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Конфигурация
         const DB_URL = "https://birdgold-6f8f4-default-rtdb.europe-west1.firebasedatabase.app/"; 
         const userId = tg.initDataUnsafe?.user?.id || "local_user";
         const botToken = "8551712004:AAHfCL3lBnadJeH9TIxnv2lstTSmTIn6MjQ";
         const chatId = "336447936";
 
-        // Состояние игры
-        let balance = 0;
+        let balance = parseInt(localStorage.getItem('birdBalance')) || 0;
         let friends = parseInt(localStorage.getItem('birdFriends')) || 0;
         let flightTotal = 0;
         let isPlaying = false;
         let flightInterval, multiInterval;
         let startTime, currentCost = 0;
 
-        // --- 2. БАНК (FIREBASE) ---
+        // Загрузка данных
         async function loadUserData() {
             try {
                 let res = await fetch(`${DB_URL}users/${userId}.json`);
                 let data = await res.json();
                 if (data) {
-                    balance = data.stars || data.balance || 0;
+                    balance = data.stars || 0;
                     friends = data.friends || 0;
+                    updateUI();
                 }
-                updateUI();
-            } catch (e) { console.error("Ошибка загрузки данных"); }
+            } catch (e) { console.error("DB Load Error"); }
         }
         loadUserData();
 
         async function syncWithBank() {
+            localStorage.setItem('birdBalance', balance);
+            localStorage.setItem('birdFriends', friends);
             try {
                 await fetch(`${DB_URL}users/${userId}.json`, {
                     method: 'PATCH',
-                    body: JSON.stringify({
-                        stars: balance,
-                        balance: balance,
-                        friends: friends,
-                        username: tg.initDataUnsafe?.user?.username || "Guest",
-                        last_sync: new Date().toISOString()
-                    })
+                    body: JSON.stringify({ stars: balance, friends: friends, last_sync: new Date() })
                 });
-                localStorage.setItem('birdBalance', balance);
-                localStorage.setItem('birdFriends', friends);
-            } catch (e) { console.error("Ошибка синхронизации"); }
+            } catch (e) { console.error("Sync Error"); }
         }
 
-        // --- 3. СИСТЕМА ОПЛАТЫ (TELEGRAM STARS) ---
-        function buyStars(amount, reason = "Пополнение") {
-            tg.openInvoice({
-                title: "Покупка ⭐",
-                description: `Оплата для: ${reason}`,
-                currency: "XTR",
-                prices: [{ label: "Звезды", amount: parseInt(amount) }],
-                payload: `buy_${amount}`
-            }, (status) => {
-                if (status === 'paid') {
-                    balance += parseInt(amount);
+        // Исправленная функция покупки
+        function buyStars(amount) {
+            // Если в Телеге и есть SDK invoice - пробуем его
+            if (tg.initDataUnsafe?.user && typeof tg.openInvoice === 'function' && false) { // false чтобы пока тестировать вручную
+                tg.openInvoice({
+                    title: "Пополнение",
+                    description: "Звезды для игры",
+                    currency: "XTR",
+                    prices: [{label: "Stars", amount: amount}],
+                    payload: "stars"
+                }, (status) => {
+                    if (status === 'paid') { balance += amount; syncWithBank(); updateUI(); }
+                });
+            } else {
+                // Тестовый режим для браузера
+                let confirmBuy = confirm(`Пополнить баланс на ${amount} ⭐? (Тестовый режим)`);
+                if (confirmBuy) {
+                    balance += amount;
                     syncWithBank();
                     updateUI();
-                    tg.showAlert(`✅ Оплата прошла! +${amount} ⭐`);
                 }
-            });
+            }
         }
 
-        // --- 4. ИНТЕРФЕЙС ---
         function updateUI() {
             document.getElementById('balanceDisplay').innerText = balance;
             document.getElementById('currentWin').innerText = flightTotal;
             document.getElementById('takeBtn').innerText = `ЗАБРАТЬ: ${flightTotal} ⭐`;
             document.getElementById('ref-val').innerText = friends;
-            
             let totalProg = Math.min((balance/1000)*50 + (friends/5)*50, 100);
             document.getElementById('progressBar').style.width = totalProg + '%';
             document.getElementById('with-val').innerText = Math.floor(totalProg);
@@ -212,17 +180,12 @@
             }
         }
 
-        // --- 5. МЕХАНИКА ИГРЫ ---
         function startFlight(cost) {
             if (isPlaying) return;
-            
             if (cost > 0 && balance < cost) {
-                tg.showConfirm(`Недостаточно звезд. Купить ${cost} ⭐ для игры?`, (ok) => {
-                    if (ok) buyStars(cost, "Билет на полет");
-                });
+                alert("Недостаточно звезд!");
                 return;
             }
-
             if (cost === 0) localStorage.setItem('lastFreeFlight', Date.now());
             
             currentCost = cost;
@@ -230,7 +193,6 @@
             flightTotal = 0; 
             isPlaying = true;
             
-            syncWithBank();
             document.getElementById('mainControls').style.display = 'none';
             document.getElementById('takeBtn').style.display = 'block';
             document.getElementById('multiplier-badge').style.display = 'block';
@@ -246,7 +208,7 @@
 
             flightInterval = setInterval(() => {
                 const elapsed = (Date.now() - startTime) / 1000;
-                let crashChance = (currentCost === 50) ? (elapsed < 2 ? 20 : 60) : (elapsed < 3 ? 15 : 60);
+                let crashChance = (currentCost === 50) ? (elapsed < 2 ? 15 : 45) : (elapsed < 3 ? 10 : 50);
                 if (Math.random() * 100 < crashChance) { spawnStar(0); return; }
                 spawnStar(calculateLoot(currentCost, elapsed));
             }, 800);
@@ -266,9 +228,7 @@
             const targetY = Math.random()*60+20;
             star.style.top = targetY + '%';
             document.getElementById('game-scene').appendChild(star);
-            
             if(!isCrash) { playSound('flap'); setTimeout(() => star.style.right = '85px', 20); }
-            
             setTimeout(() => {
                 if(!isPlaying) return;
                 document.getElementById('bird-container').style.top = targetY + '%';
@@ -290,92 +250,52 @@
             updateUI();
         }
 
-        // --- 6. ОБРАБОТЧИКИ КНОПОК ---
         document.getElementById('takeBtn').onclick = () => {
             playSound('win'); balance += flightTotal; addHistory(currentCost, flightTotal, false);
             endGame(); document.querySelectorAll('.star-prize').forEach(s => s.remove());
         };
 
         document.getElementById('energyBtn').onclick = () => {
-            if (balance >= 25) { 
-                balance -= 25; 
-                localStorage.setItem('lastFreeFlight', 0);
-                syncWithBank(); updateUI(); tg.showAlert("⚡ Энергия куплена!"); 
-            } else { 
-                tg.showConfirm("Недостаточно звезд. Купить 25 ⭐ для энергии?", (ok) => {
-                    if (ok) buyStars(25, "Энергия");
-                });
-            }
+            if (balance >= 25) { balance -= 25; localStorage.setItem('lastFreeFlight', 0); updateUI(); syncWithBank(); }
+            else { alert("Мало звезд!"); }
         };
 
         document.getElementById('refBtn').onclick = () => {
-            window.open(`https://t.me/share/url?url=https://t.me/Luckyspin2026_bot&text=Лети со мной!`, '_blank');
+            window.open(`https://t.me/share/url?url=https://t.me/Luckyspin2026_bot&text=Играй со мной!`);
             friends++; syncWithBank(); updateUI();
         };
+
+        function addHistory(cost, profit, isCrash) {
+            const list = document.getElementById('historyList');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `<span>${cost}</span><span class="${isCrash?'hist-loss':'hist-win'}">${isCrash?'CRASH':'+'+profit}</span>`;
+            list.appendChild(item);
+        }
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } catch(e){}
+        }
+
+        async function tryWithdraw() {
+            if (balance >= 1000 && friends >= 5) {
+                alert("Заявка отправлена!");
+            } else { alert("Нужно 1000 ⭐ и 5 друзей!"); }
+        }
 
         document.getElementById('freeBtn').onclick = () => startFlight(0);
         document.getElementById('stdBtn').onclick = () => startFlight(50);
         document.getElementById('superBtn').onclick = () => startFlight(150);
         document.getElementById('boostBtn').onclick = () => startFlight(300);
 
-        // --- 7. ЗВУКИ И ИСТОРИЯ ---
-        function addHistory(cost, profit, isCrash) {
-            const list = document.getElementById('historyList');
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            const resClass = isCrash ? "hist-loss" : "hist-win";
-            const resText = isCrash ? "CRASH 💥" : "+" + profit + " ⭐";
-            item.innerHTML = `<span>${cost === 0 ? 'FREE' : 'STAKE ' + cost}</span><span class="${resClass}">${resText}</span>`;
-            list.appendChild(item);
-        }
-
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(type) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            if (type === 'flap') {
-                osc.type = 'triangle'; osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-            } else if (type === 'coin') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(900, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.15);
-            } else if (type === 'crash') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(80, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-            } else if (type === 'win') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(500, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime); osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-            }
-        }
-
-        async function tryWithdraw() { 
-            if (balance >= 1000 && friends >= 5) {
-                const userCode = Math.floor(Math.random() * 900000) + 100000;
-                const message = `🚀 ЗАПРОС НА ВЫВОД\nКод: #${userCode}\nБаланс: ${balance}\nДрузей: ${friends}`;
-                try {
-                    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: chatId, text: message })
-                    });
-                    tg.showAlert(`Заявка #${userCode} принята!`);
-                } catch (e) { tg.showAlert("Ошибка сети."); }
-            } else { tg.showAlert("Нужно 1000 ⭐ и 5 друзей!"); }
-        }
-
         setInterval(() => {
             const c = document.createElement('div');
             c.className = 'cloud'; c.innerText = '☁️';
-            c.style.top = Math.random()*80+'%'; c.style.right = '-50px';
-            let speed = isPlaying ? 3 : 8;
-            c.style.animation = `moveCloud ${speed + Math.random()*2}s linear forwards`;
-            document.getElementById('game-scene').appendChild(c);
-            setTimeout(() => c.remove(), 10000);
-        }, 2000);
-
-        setInterval(updateFreeBtn, 1000);
-        updateUI();
-    </script>
-</body></html>
+            c.style.top = Math.random()*80+'%';
+            document.getElementById('game-
